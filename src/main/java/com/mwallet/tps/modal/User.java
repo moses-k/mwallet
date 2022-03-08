@@ -26,6 +26,9 @@ public class User {
 	@Column(name = "password", columnDefinition="VARCHAR(100) NOT NULL")
 	private String password;
 	
+	@Column(name = "phonenumber", columnDefinition="VARCHAR(100) NOT NULL")
+	private String phoneNumber;
+	
 	@Column(name = "txnPin", columnDefinition="VARCHAR(4)")
 	private String txnPin;
 	
@@ -48,8 +51,8 @@ public class User {
 	@JoinColumn(name = "role_code", referencedColumnName = "role_code", unique = true)
 	private UserRole role;
 	
-	//@OneToOne(mappedBy = "relationshipno")
-   // private Wallet wallet;
+	//@OneToOne(mappedBy = "walletId")
+  // private Wallet wallet;
 	
 	public String getRelationshipNo() {
 		return relationshipNo;
@@ -129,6 +132,14 @@ public class User {
 
 	public void setRole(UserRole role) {
 		this.role = role;
+	}
+
+	public String getPhoneNumber() {
+		return phoneNumber;
+	}
+
+	public void setPhoneNumber(String phoneNumber) {
+		this.phoneNumber = phoneNumber;
 	}
 	
 }

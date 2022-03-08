@@ -16,8 +16,8 @@ import com.mwallet.tps.payload.response.CustomerRegResponse;
 import com.mwallet.tps.service.AuthService;
 
 @RestController
-@RequestMapping(path = "/mwallet/customer")
-public class MwalletMainController {
+@RequestMapping(path = "/mwallet/auth")
+public class AuthController {
 	@Autowired
 	AuthService authService;
 
