@@ -9,8 +9,6 @@ import javax.persistence.Id;
 import javax.persistence.JoinColumn;
 import javax.persistence.OneToOne;
 import javax.persistence.Table;
-import javax.persistence.Transient;
-
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
 @Entity
@@ -28,9 +26,7 @@ public class Wallet {
 	@Column(name = "description", columnDefinition="VARCHAR(100) NOT NULL")
 	private String description;
 
-	@Column(name = "current_bal", columnDefinition="VARCHAR(100) NOT NULL",
-	precision = 10, scale = 2)
-	
+	@Column(name = "current_bal", precision = 10, scale = 2)
 	private BigDecimal currentBalance;
 	
 	@Column(name = "currency", columnDefinition="CHAR(4) NOT NULL")

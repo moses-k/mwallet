@@ -93,5 +93,22 @@ public class Utilities {
 		return (pstFormat.format(date));
 
 	}
+	
+	private static final String AB = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+	public static String generateTransactionCode(int len){
+	   StringBuilder sb = new StringBuilder(len);
+	   for(int i = 0; i < len; i++)
+	      sb.append(AB.charAt(rnd.nextInt(AB.length())));
+	   return sb.toString();
+	}
+	
+	/*Payment modes*/
+	private static final String LOAD_WALLET_CODE =  "WTB";
+	private static final String WALLET_P2P_CODE =  "WPP";
+	private static final String WALLET_WITHDRAW_FUNDS =  "WWF";
+	
+	public static  String getLoadAccountCode() throws Exception { return LOAD_WALLET_CODE; }
+	public static  String getTransferFundCode() throws Exception { return WALLET_P2P_CODE; }
+	public static  String getWithdrawFundsCode() throws Exception { return WALLET_WITHDRAW_FUNDS; }
 
 }
