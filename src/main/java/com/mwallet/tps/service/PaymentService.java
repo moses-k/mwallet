@@ -6,15 +6,22 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.mwallet.tps.exception.PricingNotFoundException;
+import com.mwallet.tps.exception.TestException;
 import com.mwallet.tps.exception.WalletNotFoundException;
+import com.mwallet.tps.modal.ATMTransactions;
+import com.mwallet.tps.modal.ATMWallet;
 import com.mwallet.tps.modal.Pricing;
 import com.mwallet.tps.modal.Transactions;
 import com.mwallet.tps.modal.User;
 import com.mwallet.tps.modal.Wallet;
 import com.mwallet.tps.payload.request.LoadWalletRequest;
 import com.mwallet.tps.payload.request.TransferFundRequest;
+import com.mwallet.tps.payload.request.WithdrawFundRequest;
 import com.mwallet.tps.payload.response.LoadWalletResponse;
 import com.mwallet.tps.payload.response.TransferFundResponse;
+import com.mwallet.tps.payload.response.WithdrawFundResponse;
+import com.mwallet.tps.repository.AtmWalletRepository;
+import com.mwallet.tps.repository.AtmTransactionRepository;
 import com.mwallet.tps.repository.CustomerRepository;
 import com.mwallet.tps.repository.PricingRepository;
 import com.mwallet.tps.repository.TransactionRepository;
@@ -32,6 +39,10 @@ public class PaymentService {
 	WalletRepository walletRepository;
 	@Autowired
 	CustomerRepository customerRepository;
+	@Autowired
+	AtmWalletRepository atmWalletRepository;
+	@Autowired
+	AtmTransactionRepository atmTransactionRepository;
 
 	@Transactional
 	public LoadWalletResponse loadAccount(LoadWalletRequest loadRequest) {
@@ -42,21 +53,20 @@ public class PaymentService {
 		String txnType;
 		double txnCharges = 0;
 		String txnCode;
+		String systemRef;
 		LoadWalletResponse response = new LoadWalletResponse();
 		try {
 			amount = loadRequest.getAmount();
 			walletid = loadRequest.getWalletId();
 			// get the txn mode
 			txnType = Utilities.getLoadAccountCode();
-
-			// get txn charges
-			System.out.println("before here ================================ " + txnType);
+			// generate transaction codes
+			txnCode = Utilities.generateTransactionCode(12);
+			systemRef = Utilities.getLoadAccountCode() + "-" + Utilities.generateTransactionCode(14);
 
 			Optional<Pricing> txn_Price = pricingRepository.findByTxnType(txnType);
 			Pricing txnPricing = txn_Price.orElseThrow(
 					() -> new PricingNotFoundException("No user pricing details for paymode : " + txnType));
-
-			System.out.println("Reaching here ================================");
 
 			if (txnPricing.getFixedFee().doubleValue() != 0) {
 				txnCharges = txnPricing.getFixedFee().doubleValue();
@@ -64,16 +74,8 @@ public class PaymentService {
 				txnCharges = (txnPricing.getVarFee().doubleValue()) * amount.doubleValue();
 			}
 
-			// generate transaction code
-			txnCode = Utilities.generateTransactionCode(12);
-
 			// check minimal transaction amount
 			if (amount.doubleValue() < txnPricing.getMinAmount().doubleValue()) {
-
-				// throw new Exception(
-				// "Transaction amount is less than the minimum amount allowed: KES " +
-				// txnPricing.getMinAmount());
-
 				response.setStatusCode("057"); // Transaction not allowed
 				response.setTransactionCode(txnCode);
 				response.setMessage(
@@ -86,10 +88,6 @@ public class PaymentService {
 
 			// check max amount per transaction
 			if (amount.doubleValue() > txnPricing.getMaxAmount().doubleValue()) {
-				// throw new Exception(
-				// "Transaction amount is more than the maximum amount allowed: KES " +
-				// txnPricing.getMaxAmount());
-
 				response.setStatusCode("057"); // Transaction not allowed
 				response.setTransactionCode(txnCode);
 				response.setMessage(
@@ -112,18 +110,32 @@ public class PaymentService {
 			// Save the transaction
 
 			Transactions transactions = new Transactions();
+			transactions.setSysReference(systemRef);
 			transactions.setTxnCode(txnCode);
 			transactions.setTxnType(txnType);
 			transactions.setPayMode(paymode);
 			transactions.setDateTime(Utilities.getCurrentTimeStamp());
 			transactions.setWalletId(walletid);
 			transactions.setTxnAmount(amount);
+			txnrepository.save(transactions);
 
+			// Save transaction charges
+			if (txnCharges > 0) {
+				Transactions senderTxnCharges = new Transactions();
+				senderTxnCharges.setSysReference(systemRef + "-C");
+				senderTxnCharges.setTxnCode(txnCode);
+				senderTxnCharges.setTxnType(txnType);
+				senderTxnCharges.setPayMode(paymode); // Debit account
+				senderTxnCharges.setDateTime(Utilities.getCurrentTimeStamp());
+				senderTxnCharges.setWalletId(walletid);
+				senderTxnCharges.setTxnAmount(new BigDecimal(txnCharges));
+				txnrepository.save(senderTxnCharges);
+
+			}
+			
 			// Business commissions that is the transaction charges (txnCharges) to be saved
 			// in the business ledger.
 			// This is TO BE DONE. as it out of scope as per now.
-
-			txnrepository.save(transactions);
 
 			response.setStatusCode("201");
 			response.setTransactionCode(txnCode);
@@ -148,11 +160,13 @@ public class PaymentService {
 		BigDecimal sendAmount;
 		String senderWalletId;
 		String receiverPhoneNo;
-		String senderPaymode = "D"; //Debit
-		String receiverPaymode = "C";  //Credit
+		String senderPaymode = "D"; // Debit
+		String receiverPaymode = "C"; // Credit
 		String txnType;
 		double txnCharges = 0;
 		String txnCode;
+		String senderSystemRef;
+		String receiverSystemRef;
 		TransferFundResponse response = new TransferFundResponse();
 		try {
 			sendAmount = transferFundsRequest.getSendAmount();
@@ -162,7 +176,8 @@ public class PaymentService {
 			txnType = Utilities.getTransferFundCode();
 			// generate transaction code
 			txnCode = Utilities.generateTransactionCode(12);
-
+			senderSystemRef = Utilities.getLoadAccountCode() + "-" + Utilities.generateTransactionCode(14);
+			receiverSystemRef = Utilities.getLoadAccountCode() + "-" + Utilities.generateTransactionCode(14);
 			/** step 1 get transaction charges */
 			Optional<Pricing> txn_Price = pricingRepository.findByTxnType(txnType);
 			Pricing txnPricing = txn_Price.orElseThrow(
@@ -239,24 +254,39 @@ public class PaymentService {
 
 			// Save sender transaction
 			Transactions senderTxn = new Transactions();
+			senderTxn.setSysReference(senderSystemRef);
 			senderTxn.setTxnCode(txnCode);
 			senderTxn.setTxnType(txnType);
-			senderTxn.setPayMode(receiverPaymode);  //Debit account
+			senderTxn.setPayMode(receiverPaymode); // Debit account
 			senderTxn.setDateTime(Utilities.getCurrentTimeStamp());
 			senderTxn.setWalletId(senderWalletId);
 			senderTxn.setTxnAmount(sendAmount);
-
 			txnrepository.save(senderTxn);
 
-			// Save sender transaction
+			// Save receiver transaction
 			Transactions receiverTxn = new Transactions();
+			receiverTxn.setSysReference(receiverSystemRef);
 			receiverTxn.setTxnCode(txnCode);
 			receiverTxn.setTxnType(txnType);
-			receiverTxn.setPayMode(senderPaymode); //Credit account
+			receiverTxn.setPayMode(senderPaymode); // Credit account
 			receiverTxn.setDateTime(Utilities.getCurrentTimeStamp());
-			receiverTxn.setWalletId(senderWalletId);
+			receiverTxn.setWalletId(m_WalletReceiver.getWalletId());
 			receiverTxn.setTxnAmount(sendAmount);
 			txnrepository.save(receiverTxn);
+
+			// Save sender transaction charges
+			if (txnCharges > 0) {
+				Transactions senderTxnCharges = new Transactions();
+				senderTxnCharges.setSysReference(senderSystemRef + "-C");
+				senderTxnCharges.setTxnCode(txnCode);
+				senderTxnCharges.setTxnType(txnType);
+				senderTxnCharges.setPayMode(receiverPaymode); // Debit account
+				senderTxnCharges.setDateTime(Utilities.getCurrentTimeStamp());
+				senderTxnCharges.setWalletId(senderWalletId);
+				senderTxnCharges.setTxnAmount(new BigDecimal(txnCharges));
+				txnrepository.save(senderTxnCharges);
+
+			}
 
 			// Business commissions that is the transaction charges (txnCharges) to be saved
 			// in the business ledger.
@@ -275,6 +305,169 @@ public class PaymentService {
 			// throw new LoadWalletFailedException("Load Wallet Account Failed"+
 			// e.getMessage());
 		}
+
+		return response;
+	}
+
+
+	@Transactional(rollbackFor = TestException.class)
+	public WithdrawFundResponse withdrawFromATM(WithdrawFundRequest withdrawRequest) throws TestException {
+
+		BigDecimal withdrawAmount;
+		String walletid;
+		String atmCode;
+		String paymode = "D";
+		String atmPayMode = "C";
+		String txnType;
+		double txnCharges = 0;
+		String txnCode;
+		String systemRef;
+		WithdrawFundResponse response = new WithdrawFundResponse();
+		//try {
+			withdrawAmount = withdrawRequest.getAmount();
+			walletid = withdrawRequest.getWalletId();
+			atmCode = withdrawRequest.getAtmCode();
+			// get the txn mode
+			txnType = Utilities.getATMWithdrawFundsCode();
+			// generate transaction code
+			txnCode = Utilities.generateTransactionCode(12);
+			systemRef = Utilities.getATMWithdrawFundsCode() + "-" + Utilities.generateTransactionCode(14);
+
+			// transaction price
+			Optional<Pricing> txn_Price = pricingRepository.findByTxnType(txnType);
+			Pricing txnPricing = txn_Price.orElseThrow(
+					() -> new PricingNotFoundException("No user pricing details for paymode : " + txnType));
+
+			if (txnPricing.getFixedFee().doubleValue() != 0) {
+				txnCharges = txnPricing.getFixedFee().doubleValue();
+			} else if (txnPricing.getVarFee().doubleValue() != 0) {
+				txnCharges = (txnPricing.getVarFee().doubleValue()) * withdrawAmount.doubleValue();
+			}
+
+			/** Step 2 Transaction Authorization check minimal transaction amount */
+			if (withdrawAmount.doubleValue() < txnPricing.getMinAmount().doubleValue()) {
+
+				response.setStatusCode("057"); // Transaction not allowed
+				response.setTransactionCode(txnCode);
+				response.setMessage(
+						"Withdrawal amount is less than the minimum amount allowed: KES " + txnPricing.getMinAmount());
+				response.setAmount(withdrawAmount);
+				response.setTimestamp(Utilities.getCurrentTimeStamp());
+
+				return response;
+			}
+
+			// check max amount per transaction
+			if (withdrawAmount.doubleValue() > txnPricing.getMaxAmount().doubleValue()) {
+
+				response.setStatusCode("057"); // Transaction not allowed
+				response.setTransactionCode(txnCode);
+				response.setMessage(
+						" Withdrawal amount is more than the maximum amount allowed: KES " + txnPricing.getMaxAmount());
+				response.setAmount(withdrawAmount);
+				response.setTimestamp(Utilities.getCurrentTimeStamp());
+
+				return response;
+			}
+
+			/** get ATM details */
+
+			Optional<ATMWallet> atmOptional = atmWalletRepository.findByAtmCode(atmCode);
+			ATMWallet m_ATMWallet = atmOptional
+					.orElseThrow(() -> new WalletNotFoundException("No ATM Details found for atmCode : " + atmCode));
+
+			// check ATM cash balance
+
+			if (m_ATMWallet.getCashBalance().doubleValue() < (withdrawAmount.doubleValue() + txnCharges)) {
+				response.setStatusCode("051"); // Insufficient funds
+				response.setTransactionCode(txnCode);
+				response.setMessage("ATM has insufficient cash for your Withdrawal");
+				response.setAmount(withdrawAmount);
+				response.setTimestamp(Utilities.getCurrentTimeStamp());
+
+				return response;
+			}
+
+			double newATMFloatBalance = (m_ATMWallet.getFloatBalance().doubleValue())
+					+ (withdrawAmount.doubleValue() + txnCharges);
+			double newATMFCashBalance = m_ATMWallet.getCashBalance().doubleValue() - withdrawAmount.doubleValue();
+
+			atmWalletRepository.setUpdateWallet(new BigDecimal(newATMFCashBalance), new BigDecimal(newATMFloatBalance),
+					m_ATMWallet.getWalletId());
+
+			/** Update customer wallet */
+			Optional<Wallet> walletOptional = walletRepository.findById(walletid);
+			Wallet m_Wallet = walletOptional.orElseThrow(
+					() -> new WalletNotFoundException("No Wallet Details found for walletId : " + walletid));
+
+			double newBalance = ((m_Wallet.getCurrentBalance().doubleValue()) - ((withdrawAmount.doubleValue())
+					+ txnCharges) );
+
+			walletRepository.setUpdateWallet(new BigDecimal(newBalance), walletid);
+
+			// Save the wallet transaction
+			Transactions transactions = new Transactions();
+			transactions.setSysReference(systemRef);
+			transactions.setTxnCode(txnCode);
+			transactions.setTxnType(txnType);
+			transactions.setPayMode(paymode); // Debit
+			transactions.setDateTime(Utilities.getCurrentTimeStamp());
+			transactions.setWalletId(walletid);
+			transactions.setTxnAmount(withdrawAmount);
+			txnrepository.save(transactions);
+
+			// update atm ledger
+			ATMTransactions atmTransactions = new ATMTransactions();
+			atmTransactions.setSysReference(systemRef);
+			atmTransactions.setTxnCode(txnCode);
+			atmTransactions.setTxnType(txnType);
+			atmTransactions.setPayMode(atmPayMode); // Credit
+			atmTransactions.setDateTime(Utilities.getCurrentTimeStamp());
+			atmTransactions.setWalletId(walletid);
+			atmTransactions.setTxnAmount(withdrawAmount);
+			atmTransactionRepository.save(atmTransactions);
+
+			if (txnCharges > 0) {
+				// Save the wallet transaction
+				Transactions chargesTxn = new Transactions();
+				chargesTxn.setSysReference(systemRef + "-C");
+				chargesTxn.setTxnCode(txnCode);
+				chargesTxn.setTxnType("Charges");
+				chargesTxn.setPayMode(paymode); // Debit
+				chargesTxn.setDateTime(Utilities.getCurrentTimeStamp());
+				chargesTxn.setWalletId(walletid);
+				chargesTxn.setTxnAmount(new BigDecimal(txnCharges));
+				txnrepository.save(chargesTxn);
+
+				// update atm ledger commission
+				ATMTransactions atmcommissionTxn = new ATMTransactions();
+				atmcommissionTxn.setSysReference(systemRef + "-C");
+				atmcommissionTxn.setTxnCode(txnCode);
+				atmcommissionTxn.setTxnType("Commission");
+				atmcommissionTxn.setPayMode(atmPayMode); // Credit
+				atmcommissionTxn.setDateTime(Utilities.getCurrentTimeStamp());
+				atmcommissionTxn.setWalletId(walletid);
+				atmcommissionTxn.setTxnAmount(new BigDecimal(txnCharges));
+				atmTransactionRepository.save(atmcommissionTxn);
+
+			}
+
+			// Business commissions that is the transaction charges (txnCharges) to be saved
+			// in the business ledger.
+			// This is TO BE DONE. as it out of scope as per now.
+
+			response.setStatusCode("201");
+			response.setTransactionCode(txnCode);
+			response.setMessage("Withdrawal successful");
+			response.setAmount(withdrawAmount);
+			response.setAtmcode(withdrawRequest.getAtmCode());
+			response.setTimestamp(Utilities.getCurrentTimeStamp());
+
+		/*} catch (Exception e) {
+			System.out.println("Load Wallet Account Failed" + e.getMessage());
+			 throw new TestException("Load Wallet Account Failed");
+			// e.getMessage());
+		}*/
 
 		return response;
 

@@ -8,6 +8,8 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.TimeZone;
 
+import com.mwallet.tps.exception.TestException;
+
 public class Utilities {
 
 	static final String RNDSTRING = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -102,13 +104,13 @@ public class Utilities {
 	   return sb.toString();
 	}
 	
-	/*Payment modes*/
+	/*Transaction Types*/
 	private static final String LOAD_WALLET_CODE =  "WTB";
 	private static final String WALLET_P2P_CODE =  "WPP";
-	private static final String WALLET_WITHDRAW_FUNDS =  "WWF";
+	private static final String WALLET_ATM_WITHDRAWAL =  "WAW";
 	
-	public static  String getLoadAccountCode() throws Exception { return LOAD_WALLET_CODE; }
-	public static  String getTransferFundCode() throws Exception { return WALLET_P2P_CODE; }
-	public static  String getWithdrawFundsCode() throws Exception { return WALLET_WITHDRAW_FUNDS; }
+	public static  String getLoadAccountCode() throws TestException { return LOAD_WALLET_CODE; }
+	public static  String getTransferFundCode() throws TestException { return WALLET_P2P_CODE; }
+	public static  String getATMWithdrawFundsCode() throws TestException { return WALLET_ATM_WITHDRAWAL; }
 
 }

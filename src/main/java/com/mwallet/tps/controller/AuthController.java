@@ -20,7 +20,6 @@ import com.mwallet.tps.service.AuthService;
 public class AuthController {
 	@Autowired
 	AuthService authService;
-
 	/*Customer registration*/
 	@PostMapping(path = "/register", consumes = "application/json", produces = "application/json")
 	public ResponseEntity<CustomerRegResponse> registerCustomer(
@@ -36,6 +35,8 @@ public class AuthController {
 		AuthenticationResponse loginResponse = authService.customerLogin(custLoginRequest);
 	return new ResponseEntity<AuthenticationResponse>(loginResponse, HttpStatus.OK);
 	}
+	
+	
 	
 
 }

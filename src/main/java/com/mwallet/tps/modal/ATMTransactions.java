@@ -7,8 +7,8 @@ import javax.persistence.Id;
 import javax.persistence.Table;
 
 @Entity
-@Table(name = "txn_details")
-public class Transactions {
+@Table(name = "atm_txn_details")
+public class ATMTransactions {
 
 	@Id
 	@Column(name = "sysreference", columnDefinition="VARCHAR(20) NOT NULL")
@@ -16,11 +16,6 @@ public class Transactions {
 	
 	@Column(name = "txn_code", columnDefinition="VARCHAR(12) NOT NULL")
 	private String txnCode;
-	
-	/*@OneToOne(cascade = CascadeType.ALL)
-	@JoinColumn(name = "walletid", referencedColumnName = "walletid", unique = true)
-	@JsonIgnore
-	private Wallet wallet;*/
 	
 	@Column(name = "walletid", columnDefinition = "VARCHAR(16) NOT NULL")
 	private String walletId;
